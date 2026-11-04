@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+# Start Tinyproxy daemon in background
+{{ tinyproxy_bin }} -c {{ tinyproxy_conf_file }}
+
+# Exec SNClient server in foreground (PID 1)
+exec {{ snclient_bin }} server -c {{ snclient_ini_file }}

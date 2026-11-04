@@ -1,0 +1,11 @@
+Port {{ tinyproxy_port }}
+Timeout 600
+MaxClients 10
+{% if tinyproxy_user and tinyproxy_password %}
+BasicAuth {{ tinyproxy_user }} {{ tinyproxy_password }}
+{% endif %}
+PidFile "{{ tinyproxy_pid_file }}"
+LogFile "{{ tinyproxy_log_file }}"
+LogLevel Info
+ConnectPort 443
+ConnectPort {{ snclient_port }}

@@ -1,0 +1,15 @@
+[project]
+name = "check_snclient-forge"
+version = "0.1.0"
+description = "E2E Integration test harness for check_snclient"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pytest-testinfra>=10.2.0",
+    "jinja2>=3.1.0",
+    "ansible-core>=2.15.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+addopts = "-v"

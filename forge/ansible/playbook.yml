@@ -1,0 +1,46 @@
+---
+- name: Provision check_snclient E2E testbed
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - vars/main.yml
+  pre_tasks:
+    - name: Resolve dynamic snclient_port if set to 0
+      when: snclient_port | int == 0
+      ansible.builtin.command:
+        cmd: "python3 -c \"import socket; s=socket.socket(); s.bind(('', 0)); print(s.getsockname()[1]); s.close()\""
+      register: dynamic_snclient_port
+      changed_when: false
+
+    - name: Apply resolved snclient_port
+      when: snclient_port | int == 0
+      ansible.builtin.set_fact:
+        snclient_port: "{{ dynamic_snclient_port.stdout | int }}"
+
+    - name: Resolve dynamic tinyproxy_port if set to 0
+      when: tinyproxy_port | int == 0
+      ansible.builtin.command:
+        cmd: "python3 -c \"import socket; s=socket.socket(); s.bind(('', 0)); print(s.getsockname()[1]); s.close()\""
+      register: dynamic_tinyproxy_port
+      changed_when: false
+
+    - name: Apply resolved tinyproxy_port
+      when: tinyproxy_port | int == 0
+      ansible.builtin.set_fact:
+        tinyproxy_port: "{{ dynamic_tinyproxy_port.stdout | int }}"
+
+    - name: Ensure testbed workdir exists
+      ansible.builtin.file:
+        path: "{{ workdir }}"
+        state: directory
+        mode: "0755"
+  roles:
+    - role: snclient
+    - role: tinyproxy
+  post_tasks:
+    - name: Deploy container entrypoint script
+      ansible.builtin.template:
+        src: templates/entrypoint.sh.j2
+        dest: "{{ entrypoint_script | default('/entrypoint.sh') }}"
+        mode: "0755"
+      when: packer_builder_type is defined or (create_entrypoint | default(false))

@@ -1,0 +1,103 @@
+---
+- name: Define snclient file paths
+  ansible.builtin.set_fact:
+    snclient_bin: "{{ bin_dir }}/snclient"
+    snclient_workdir: "{{ workdir }}/snclient"
+    snclient_ini_file: "{{ workdir }}/snclient/snclient.ini"
+    snclient_cert_file: "{{ workdir }}/snclient/server.crt"
+    snclient_key_file: "{{ workdir }}/snclient/server.key"
+    snclient_pid_file: "{{ workdir }}/snclient/snclient.pid"
+
+- name: Ensure target directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ bin_dir }}"
+    - "{{ snclient_workdir }}"
+
+- name: Check if snclient binary already exists
+  ansible.builtin.stat:
+    path: "{{ snclient_bin }}"
+  register: snclient_stat
+
+- name: Download and extract snclient binary if not cached
+  when: not snclient_stat.stat.exists
+  block:
+    - name: Download snclient deb package
+      ansible.builtin.get_url:
+        url: "https://github.com/ConSol-Monitoring/snclient/releases/download/v{{ snclient_version }}/snclient-{{ snclient_version }}-linux-x86_64.deb"
+        dest: "{{ workdir }}/snclient.deb"
+        mode: "0644"
+
+    - name: Extract snclient deb package
+      ansible.builtin.command:
+        cmd: "dpkg-deb -x {{ workdir }}/snclient.deb {{ workdir }}"
+      changed_when: true
+
+    - name: Move extracted snclient binary to bin_dir
+      ansible.builtin.copy:
+        src: "{{ workdir }}/usr/bin/snclient"
+        dest: "{{ snclient_bin }}"
+        mode: "0755"
+        remote_src: true
+
+- name: Ensure snclient binary is executable
+  ansible.builtin.file:
+    path: "{{ snclient_bin }}"
+    mode: "0755"
+
+- name: Check if TLS certificate exists
+  ansible.builtin.stat:
+    path: "{{ snclient_cert_file }}"
+  register: cert_stat
+
+- name: Generate self-signed TLS certificate
+  when: not cert_stat.stat.exists
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -newkey rsa:2048
+      -keyout {{ snclient_key_file }}
+      -out {{ snclient_cert_file }}
+      -days 1 -nodes -subj "/CN=localhost"
+  changed_when: true
+
+- name: Deploy snclient.ini configuration
+  ansible.builtin.template:
+    src: snclient.ini.j2
+    dest: "{{ snclient_ini_file }}"
+    mode: "0644"
+
+- name: Stop any existing snclient process
+  ansible.builtin.shell:
+    cmd: "if [ -f {{ snclient_pid_file }} ]; then kill -9 $(cat {{ snclient_pid_file }}) 2>/dev/null || true; fi"
+  changed_when: false
+
+- name: Start snclient daemon in background
+  ansible.builtin.command:
+    cmd: "{{ snclient_bin }} server -c {{ snclient_ini_file }}"
+  async: 86400
+  poll: 0
+
+- name: Wait for snclient port to become available
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ snclient_port }}"
+    timeout: 10
+
+- name: Ensure snclient runtime properties directory exists
+  ansible.builtin.file:
+    path: "{{ snclient_workdir }}/runtime"
+    state: directory
+    mode: "0755"
+
+- name: Publish snclient runtime properties
+  ansible.builtin.copy:
+    dest: "{{ snclient_workdir }}/runtime/{{ item.key }}"
+    content: "{{ item.value }}"
+    mode: "0600"
+  loop:
+    - { key: "port", value: "{{ snclient_port }}" }
+    - { key: "url", value: "https://127.0.0.1:{{ snclient_port }}" }
+    - { key: "password", value: "{{ snclient_password }}" }

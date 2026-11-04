@@ -1,0 +1,12 @@
+---
+forge_base_dir: "{{ playbook_dir }}/.."
+bin_dir: "{{ forge_base_dir }}/bin"
+workdir: "{{ forge_base_dir }}/workdir"
+
+snclient_version: "1.01"
+snclient_port: "{{ lookup('env', 'SNCLIENT_PORT') | default(0, true) | int }}"
+snclient_password: "{{ lookup('env', 'SNCLIENT_PASSWORD') | default('secret_forge_pass', true) }}"
+
+tinyproxy_port: "{{ lookup('env', 'TINYPROXY_PORT') | default(0, true) | int }}"
+tinyproxy_user: "{{ lookup('env', 'TINYPROXY_USER') | default('proxyuser', true) }}"
+tinyproxy_password: "{{ lookup('env', 'TINYPROXY_PASSWORD') | default('proxypass', true) }}"

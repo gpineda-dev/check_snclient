@@ -1,0 +1,32 @@
+---
+- name: Teardown check_snclient E2E testbed
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - vars/main.yml
+  tasks:
+    - name: Kill snclient daemon by PID
+      ansible.builtin.shell:
+        cmd: "if [ -f {{ workdir }}/snclient/snclient.pid ]; then kill -9 $(cat {{ workdir }}/snclient/snclient.pid) 2>/dev/null || true; fi"
+      changed_when: false
+
+    - name: Kill tinyproxy daemon by PID
+      ansible.builtin.shell:
+        cmd: "if [ -f {{ workdir }}/tinyproxy/tinyproxy.pid ]; then kill -9 $(cat {{ workdir }}/tinyproxy/tinyproxy.pid) 2>/dev/null || true; fi"
+      changed_when: false
+
+    - name: Kill lingering processes on component runtime ports
+      ansible.builtin.shell:
+        cmd: |
+          if [ -f {{ workdir }}/snclient/runtime/port ]; then
+            fuser -k $(cat {{ workdir }}/snclient/runtime/port)/tcp 2>/dev/null || true
+          fi
+          if [ -f {{ workdir }}/tinyproxy/runtime/port ]; then
+            fuser -k $(cat {{ workdir }}/tinyproxy/runtime/port)/tcp 2>/dev/null || true
+          fi
+      changed_when: false
+
+    - name: Remove ephemeral runtime workdir
+      ansible.builtin.file:
+        path: "{{ workdir }}"
+        state: absent

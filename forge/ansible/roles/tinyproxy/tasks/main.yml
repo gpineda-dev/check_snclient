@@ -1,0 +1,105 @@
+---
+- name: Define tinyproxy file paths
+  ansible.builtin.set_fact:
+    tinyproxy_bin: "{{ bin_dir }}/tinyproxy"
+    tinyproxy_workdir: "{{ workdir }}/tinyproxy"
+    tinyproxy_conf_file: "{{ workdir }}/tinyproxy/tinyproxy.conf"
+    tinyproxy_pid_file: "{{ workdir }}/tinyproxy/tinyproxy.pid"
+    tinyproxy_log_file: "{{ workdir }}/tinyproxy/tinyproxy.log"
+
+- name: Ensure tinyproxy workdir exists
+  ansible.builtin.file:
+    path: "{{ tinyproxy_workdir }}"
+    state: directory
+    mode: "0755"
+
+- name: Check if tinyproxy binary already exists
+  ansible.builtin.stat:
+    path: "{{ tinyproxy_bin }}"
+  register: tinyproxy_stat
+
+- name: Check if tinyproxy exists on system
+  ansible.builtin.stat:
+    path: "/usr/bin/tinyproxy"
+  register: system_tinyproxy_stat
+  when: not tinyproxy_stat.stat.exists
+
+- name: Copy system tinyproxy to target bin_dir if available
+  ansible.builtin.copy:
+    src: "/usr/bin/tinyproxy"
+    dest: "{{ tinyproxy_bin }}"
+    mode: "0755"
+    remote_src: true
+  when: not tinyproxy_stat.stat.exists and system_tinyproxy_stat.stat.exists
+
+- name: Download and extract tinyproxy binary if not cached
+  when: not tinyproxy_stat.stat.exists and (system_tinyproxy_stat.stat is not defined or not system_tinyproxy_stat.stat.exists)
+  block:
+    - name: Download tinyproxy deb package in user space
+      ansible.builtin.shell:
+        cmd: "apt-get download tinyproxy 2>/dev/null || apt-get download tinyproxy-bin"
+        chdir: "{{ tinyproxy_workdir }}"
+      changed_when: true
+
+    - name: Find downloaded deb package
+      ansible.builtin.find:
+        paths: "{{ tinyproxy_workdir }}"
+        patterns: "tinyproxy*.deb"
+      register: found_deb
+
+    - name: Extract tinyproxy deb package
+      ansible.builtin.command:
+        cmd: "dpkg-deb -x {{ found_deb.files[0].path }} {{ tinyproxy_workdir }}"
+      changed_when: true
+
+    - name: Copy extracted tinyproxy binary to bin_dir
+      ansible.builtin.copy:
+        src: "{{ tinyproxy_workdir }}/usr/bin/tinyproxy"
+        dest: "{{ tinyproxy_bin }}"
+        mode: "0755"
+        remote_src: true
+
+- name: Ensure tinyproxy binary is executable
+  ansible.builtin.file:
+    path: "{{ tinyproxy_bin }}"
+    mode: "0755"
+
+- name: Deploy tinyproxy.conf configuration
+  ansible.builtin.template:
+    src: tinyproxy.conf.j2
+    dest: "{{ tinyproxy_conf_file }}"
+    mode: "0644"
+
+- name: Stop any existing tinyproxy process
+  ansible.builtin.shell:
+    cmd: "if [ -f {{ tinyproxy_pid_file }} ]; then kill -9 $(cat {{ tinyproxy_pid_file }}) 2>/dev/null || true; fi"
+  changed_when: false
+
+- name: Start tinyproxy daemon
+  ansible.builtin.command:
+    cmd: "{{ tinyproxy_bin }} -c {{ tinyproxy_conf_file }}"
+  changed_when: true
+
+- name: Wait for tinyproxy port to become available
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ tinyproxy_port }}"
+    timeout: 10
+
+- name: Ensure tinyproxy runtime properties directory exists
+  ansible.builtin.file:
+    path: "{{ tinyproxy_workdir }}/runtime"
+    state: directory
+    mode: "0755"
+
+- name: Publish tinyproxy runtime properties
+  ansible.builtin.copy:
+    dest: "{{ tinyproxy_workdir }}/runtime/{{ item.key }}"
+    content: "{{ item.value }}"
+    mode: "0600"
+  loop:
+    - { key: "port", value: "{{ tinyproxy_port }}" }
+    - { key: "url", value: "http://{{ tinyproxy_user }}:{{ tinyproxy_password }}@127.0.0.1:{{ tinyproxy_port }}" }
+    - { key: "url_invalid_auth", value: "http://wronguser:wrongpass@127.0.0.1:{{ tinyproxy_port }}" }
+    - { key: "user", value: "{{ tinyproxy_user }}" }
+    - { key: "password", value: "{{ tinyproxy_password }}" }
