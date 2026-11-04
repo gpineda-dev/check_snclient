@@ -81,7 +81,8 @@ status: ## Check if local testbed components are listening
 .PHONY: test
 test: setup ## Run Testinfra integration tests against active testbed
 	@echo "==> Running Testinfra integration tests..."
-	@cd $(FORGE_DIR) && $(UV) run pytest -v $(if $(CHECK_BIN),--check-bin $(CHECK_BIN),) $(ARGS)
+	@cd $(FORGE_DIR) && $(if $(CHECK_BIN),CHECK_SNCLIENT_BIN="$(CHECK_BIN)",) \
+		$(UV) run pytest -v test_checks.py $(if $(CHECK_BIN),--check-bin "$(CHECK_BIN)",) $(ARGS)
 
 .PHONY: test-all
 test-all: setup ## Start testbed, run tests, and tear down (supports SNCLIENT_PORT=0)
