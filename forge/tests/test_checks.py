@@ -42,19 +42,18 @@ class TestSNClientIntegration:
         assert cmd.rc != 0
         assert "403" in cmd.stdout or "UNKNOWN" in cmd.stdout
 
-    def test_proxy_traversal(
+    def test_proxy_traversal_success(
         self,
         host: Host,
         check_bin: str,
         snclient_info: SNClientRuntime,
         proxy_info: TinyproxyRuntime,
     ) -> None:
-        """Verifies that check_snclient can traverse an authentic Tinyproxy forward proxy via HTTP CONNECT."""
+        """Verifies that check_snclient successfully traverses an authentic forward proxy."""
         help_cmd = host.run(f"{check_bin} -h")
         if "-proxy" not in help_cmd.stdout:
             pytest.skip("Provided check_snclient binary does not support the -proxy option")
 
-        # 1. Valid forward proxy with authentication
         cmd = host.run(
             f"{check_bin} -k -u {snclient_info.url} -p {snclient_info.password} "
             f"-proxy {proxy_info.url} check_uptime"
@@ -63,11 +62,22 @@ class TestSNClientIntegration:
         assert cmd.rc in (0, 1)
         assert "uptime" in cmd.stdout.lower()
 
-        # 2. Invalid proxy authentication (must fail with exit code 3 UNKNOWN)
-        cmd_bad = host.run(
+    def test_proxy_traversal_invalid_auth(
+        self,
+        host: Host,
+        check_bin: str,
+        snclient_info: SNClientRuntime,
+        proxy_info: TinyproxyRuntime,
+    ) -> None:
+        """Verifies that invalid proxy credentials fail with exit code 3 (UNKNOWN)."""
+        help_cmd = host.run(f"{check_bin} -h")
+        if "-proxy" not in help_cmd.stdout:
+            pytest.skip("Provided check_snclient binary does not support the -proxy option")
+
+        cmd = host.run(
             f"{check_bin} -k -u {snclient_info.url} -p {snclient_info.password} "
             f"-proxy {proxy_info.url_invalid_auth} check_uptime"
         )
-        print(f"\n  ↳ [RC={cmd_bad.rc}] {cmd_bad.stdout.strip()}")
-        assert cmd_bad.rc == 3
-        assert any(term in cmd_bad.stdout for term in ("Proxy Authentication Required", "Unauthorized", "407"))
+        print(f"\n  ↳ [RC={cmd.rc}] {cmd.stdout.strip()}")
+        assert cmd.rc == 3
+        assert any(term in cmd.stdout for term in ("Proxy Authentication Required", "Unauthorized", "407"))
