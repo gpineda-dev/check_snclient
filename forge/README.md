@@ -99,20 +99,22 @@ This guarantees full auditability: any command can be copied and pasted directly
 
 The forge offers two ways to run the testbed, both powered by the **exact same Ansible playbook** (zero code duplication):
 
-```text
-               ┌────────────────────────────────────────────────────────┐
-               │    Canonical Recipe : forge/ansible/playbook.yml       │
-               └───────────────────────────┬────────────────────────────┘
-                                           │
-                    ┌──────────────────────┴──────────────────────┐
-                    ▼                                             ▼
-        [Mode 1 : Local Ansible]                      [Mode 2 : Packer Image]
-           make up / test-all                                make bake
-                    │                                             │
-      • Direct user-space execution                 • OCI packaging (Debian Slim)
-      • Instant startup (1-2s)                      • Universal execution via Docker
-      • Dynamic ports (zero collision)              • Immutable & hermetic
-      • Ideal for Linux local dev loop              • Ideal for Cloud CI, macOS, Windows
+```mermaid
+flowchart TD
+    Recipe["Canonical Recipe: forge/ansible/playbook.yml"]
+
+    Recipe -->|Direct local execution| M1
+    Recipe -->|Packer provisioner| M2
+
+    subgraph M1["Mode 1: Local Ansible (make up / test-all)"]
+        direction TB
+        M1_Details["• Direct user-space execution\n• Instant startup (~1s)\n• Dynamic ephemeral ports (zero collision)\n• Ideal for Linux daily dev loop"]
+    end
+
+    subgraph M2["Mode 2: Packer Image (make bake)"]
+        direction TB
+        M2_Details["• OCI packaging (Debian Slim)\n• Universal execution via Docker\n• Immutable & hermetic\n• Ideal for Cloud CI, macOS, Windows"]
+    end
 ```
 
 ### When to use which mode?
