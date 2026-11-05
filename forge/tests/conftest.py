@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pytest
+
+from forge.models import (
+    ComponentNotRunningError,
+    ComponentRuntime,
+    SNClientRuntime,
+    TinyproxyRuntime,
+)
 
 if TYPE_CHECKING:
     from testinfra.host import Host
@@ -13,76 +19,6 @@ if TYPE_CHECKING:
 FORGE_DIR = Path(__file__).parent.parent.resolve()
 REPO_ROOT = FORGE_DIR.parent.resolve()
 WORKDIR = FORGE_DIR / "workdir"
-
-
-@dataclass
-class ComponentRuntime:
-    """Discovers component properties exposed in configfs-style files under runtime/."""
-
-    runtime_dir: Path
-    _data: dict[str, str] = field(default_factory=dict, init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        if not self.runtime_dir.is_dir():
-            component_name = self.runtime_dir.parent.name
-            pytest.fail(
-                f"{component_name} testbed is not running (missing {self.runtime_dir}). "
-                "Please run 'make -C forge up' first."
-            )
-        for prop_file in self.runtime_dir.iterdir():
-            if prop_file.is_file():
-                self._data[prop_file.name] = prop_file.read_text().strip()
-
-    def get(self, key: str, default: str | None = None) -> str | None:
-        return self._data.get(key, default)
-
-    def __getitem__(self, key: str) -> str:
-        return self._data[key]
-
-    def __contains__(self, key: object) -> bool:
-        return key in self._data
-
-
-@dataclass
-class SNClientRuntime(ComponentRuntime):
-    """Strongly-typed golden path accessors for SNClient agent properties."""
-
-    @property
-    def port(self) -> int:
-        return int(self._data["port"])
-
-    @property
-    def url(self) -> str:
-        return self._data["url"]
-
-    @property
-    def password(self) -> str:
-        return self._data["password"]
-
-
-@dataclass
-class TinyproxyRuntime(ComponentRuntime):
-    """Strongly-typed golden path accessors for Tinyproxy forward proxy properties."""
-
-    @property
-    def port(self) -> int:
-        return int(self._data["port"])
-
-    @property
-    def url(self) -> str:
-        return self._data["url"]
-
-    @property
-    def url_invalid_auth(self) -> str:
-        return self._data["url_invalid_auth"]
-
-    @property
-    def user(self) -> str:
-        return self._data["user"]
-
-    @property
-    def password(self) -> str:
-        return self._data["password"]
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -116,13 +52,19 @@ def check_bin(request: pytest.FixtureRequest) -> str:
 @pytest.fixture(scope="session")
 def snclient_info() -> SNClientRuntime:
     """Provides SNClient runtime properties and golden path getters."""
-    return SNClientRuntime(runtime_dir=WORKDIR / "snclient" / "runtime")
+    try:
+        return SNClientRuntime(runtime_dir=WORKDIR / "snclient" / "runtime")
+    except ComponentNotRunningError as err:
+        pytest.fail(str(err))
 
 
 @pytest.fixture(scope="session")
 def proxy_info() -> TinyproxyRuntime:
     """Provides Tinyproxy runtime properties and golden path getters."""
-    return TinyproxyRuntime(runtime_dir=WORKDIR / "tinyproxy" / "runtime")
+    try:
+        return TinyproxyRuntime(runtime_dir=WORKDIR / "tinyproxy" / "runtime")
+    except ComponentNotRunningError as err:
+        pytest.fail(str(err))
 
 
 @pytest.fixture(scope="module", autouse=True)
