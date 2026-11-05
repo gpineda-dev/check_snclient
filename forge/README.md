@@ -96,8 +96,9 @@ forge/
 ├── packer/
 │   └── testbed.pkr.hcl         # Packer HCL2 template to bake an immutable Docker image
 │
-├── conftest.py                 # Pytest configuration & typed ComponentRuntime accessors
-├── test_checks.py              # Testinfra assertions (Host)
+├── tests/
+│   ├── conftest.py             # Pytest configuration & typed ComponentRuntime accessors
+│   └── test_checks.py          # Testinfra assertions (Host)
 ├── Makefile                    # Unified lifecycle management
 └── pyproject.toml              # uv project declaration
 ```

@@ -11,5 +11,5 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["."]
-addopts = "-v"
+testpaths = ["tests"]
+addopts = "-v -s"

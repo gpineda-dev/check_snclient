@@ -10,7 +10,7 @@ import pytest
 if TYPE_CHECKING:
     from testinfra.host import Host
 
-FORGE_DIR = Path(__file__).parent.resolve()
+FORGE_DIR = Path(__file__).parent.parent.resolve()
 REPO_ROOT = FORGE_DIR.parent.resolve()
 WORKDIR = FORGE_DIR / "workdir"
 
