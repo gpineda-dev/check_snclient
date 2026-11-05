@@ -9,13 +9,15 @@ VENV := $(FORGE_DIR)/.venv
 SNCLIENT_PORT ?= 0
 TINYPROXY_PORT ?= 0
 CHECK_BIN ?=
+BACKEND ?= local
+CALLER ?= auto
 ARGS ?=
 
 .PHONY: help
 help: ## Show this help message
 	@echo "check_snclient Test Forge - Management Makefile"
 	@echo ""
-	@echo "Usage: make [target] [SNCLIENT_PORT=0|port] [TINYPROXY_PORT=0|port] [CHECK_BIN=/path/to/bin]"
+	@echo "Usage: make [target] [BACKEND=local|docker] [CALLER=auto|local|docker] [CHECK_BIN=/path/to/bin]"
 	@echo ""
 	@echo "Targets:"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -42,31 +44,53 @@ packer-init: ## Download and initialize local Packer binary and plugins
 	echo "==> Initializing Packer plugins..."; \
 	$$PACKER init $(FORGE_DIR)/packer/testbed.pkr.hcl
 
-# --- Local Testbed Lifecycle (Unified Forge CLI) ---
+# --- Testbed Lifecycle (Unified Forge CLI) ---
 
 .PHONY: up
-up: setup ## Provision and start SNClient & Tinyproxy locally (supports SNCLIENT_PORT=0)
-	@cd $(FORGE_DIR) && $(UV) run forge up --snclient-port $(SNCLIENT_PORT) --tinyproxy-port $(TINYPROXY_PORT)
+up: setup ## Start testbed daemons (Usage: make up [BACKEND=local|docker])
+	@cd $(FORGE_DIR) && $(UV) run forge up --backend $(BACKEND) --snclient-port $(SNCLIENT_PORT) --tinyproxy-port $(TINYPROXY_PORT)
 
 .PHONY: down
-down: setup ## Stop local testbed daemons and clean runtime directory
-	@cd $(FORGE_DIR) && $(UV) run forge down --snclient-port $(SNCLIENT_PORT) --tinyproxy-port $(TINYPROXY_PORT)
+down: setup ## Stop active testbed daemons and clean runtime directory
+	@cd $(FORGE_DIR) && $(UV) run forge down $(if $(filter-out local,$(BACKEND)),--backend $(BACKEND),)
 
 .PHONY: status
-status: setup ## Check if local testbed components are listening
-	@cd $(FORGE_DIR) && $(UV) run forge status
+status: setup ## Check if testbed components are listening
+	@cd $(FORGE_DIR) && $(UV) run forge status $(if $(CHECK_BIN),--check-bin "$(CHECK_BIN)",)
 
 .PHONY: info
 info: setup ## Display environment paths, workdir state, and installed binaries
-	@cd $(FORGE_DIR) && $(UV) run forge info
+	@cd $(FORGE_DIR) && $(UV) run forge info $(if $(CHECK_BIN),--check-bin "$(CHECK_BIN)",)
+
+.PHONY: attach
+attach: setup ## Attach a custom binary under test (Usage: make -C forge attach BIN=/path/to/bin)
+	@if [ -z "$(BIN)" ]; then \
+		echo "Error: BIN is required. Usage: make -C forge attach BIN=/path/to/check_snclient"; exit 1; \
+	fi
+	@cd $(FORGE_DIR) && $(UV) run forge attach "$(BIN)"
+
+.PHONY: detach
+detach: setup ## Detach custom binary and reset to default repo build
+	@cd $(FORGE_DIR) && $(UV) run forge detach
+
+.PHONY: bind
+bind: setup ## Lock forge to external target (Usage: make bind NAME=staging URL=https://... PASS=... [PROXY=...])
+	@if [ -z "$(URL)" ] || [ -z "$(PASS)" ]; then \
+		echo "Error: URL and PASS are required. Usage: make -C forge bind NAME=staging URL=https://remote:8443 PASS=secret [PROXY=http://...]"; exit 1; \
+	fi
+	@cd $(FORGE_DIR) && $(UV) run forge bind "$(or $(NAME),external)" --snclient-url "$(URL)" --snclient-pass "$(PASS)" $(if $(PROXY),--proxy-url "$(PROXY)",)
+
+.PHONY: unbind
+unbind: setup ## Release external target lock
+	@cd $(FORGE_DIR) && $(UV) run forge unbind
 
 .PHONY: test
 test: setup ## Run Testinfra integration tests against active testbed
-	@cd $(FORGE_DIR) && $(UV) run forge test $(if $(CHECK_BIN),--check-bin "$(CHECK_BIN)",) $(ARGS)
+	@cd $(FORGE_DIR) && $(UV) run forge test --caller $(CALLER) $(if $(CHECK_BIN),--check-bin "$(CHECK_BIN)",) $(ARGS)
 
 .PHONY: test-all
-test-all: setup ## Start testbed, run tests, and tear down (supports SNCLIENT_PORT=0)
-	@cd $(FORGE_DIR) && $(UV) run forge test-all --snclient-port $(SNCLIENT_PORT) --tinyproxy-port $(TINYPROXY_PORT) $(if $(CHECK_BIN),--check-bin "$(CHECK_BIN)",)
+test-all: setup ## Start testbed, run tests, and tear down (Usage: make test-all [BACKEND=local|docker] [CALLER=auto|local|docker])
+	@cd $(FORGE_DIR) && $(UV) run forge test-all --backend $(BACKEND) --caller $(CALLER) --snclient-port $(SNCLIENT_PORT) --tinyproxy-port $(TINYPROXY_PORT) $(if $(CHECK_BIN),--check-bin "$(CHECK_BIN)",) $(ARGS)
 
 # --- Docker & Packer Image Baking ---
 
@@ -75,12 +99,16 @@ bake: packer-init setup ## Bake Docker image via Packer (check_snclient-testbed:
 	@cd $(FORGE_DIR) && $(UV) run forge bake
 
 .PHONY: container-run
-container-run: setup ## Run baked Docker testbed in background
-	@cd $(FORGE_DIR) && $(UV) run forge container-run
+container-run: setup ## Alias for 'make up BACKEND=docker'
+	@$(MAKE) up BACKEND=docker
 
 .PHONY: container-stop
-container-stop: setup ## Stop Docker testbed container
-	@cd $(FORGE_DIR) && $(UV) run forge container-stop
+container-stop: setup ## Alias for 'make down BACKEND=docker'
+	@$(MAKE) down BACKEND=docker
+
+.PHONY: container-test
+container-test: setup ## Alias for 'make test-all BACKEND=docker'
+	@$(MAKE) test-all BACKEND=docker CALLER=$(CALLER) $(if $(CHECK_BIN),CHECK_BIN="$(CHECK_BIN)",)
 
 # --- Cleanup ---
 

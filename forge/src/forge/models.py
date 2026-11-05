@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import socket
 from typing import Any
+from urllib.parse import urlparse
 
 
 class ComponentNotRunningError(RuntimeError):
@@ -43,11 +44,24 @@ class ComponentRuntime:
         """Returns True if the runtime directory exists and has properties loaded."""
         return bool(self._data)
 
-    def is_listening(self, host: str = "127.0.0.1", timeout: float = 0.5) -> bool:
-        """Checks if the component's port is listening on the host."""
+    @property
+    def host(self) -> str:
+        """Extracts the target host from 'url' or defaults to 127.0.0.1."""
+        if "url" in self._data:
+            try:
+                parsed = urlparse(self._data["url"])
+                if parsed.hostname:
+                    return parsed.hostname
+            except Exception:
+                pass
+        return "127.0.0.1"
+
+    def is_listening(self, host: str | None = None, timeout: float = 0.5) -> bool:
+        """Checks if the component's port is listening on the resolved or specified host."""
         if "port" not in self._data:
             return False
-        return check_socket(host, int(self._data["port"]), timeout=timeout)
+        target_host = host or self.host
+        return check_socket(target_host, int(self._data["port"]), timeout=timeout)
 
     def get(self, key: str, default: str | None = None) -> str | None:
         return self._data.get(key, default)

@@ -4,9 +4,12 @@ bin_dir: "{{ forge_base_dir }}/bin"
 workdir: "{{ forge_base_dir }}/workdir"
 
 snclient_version: "1.01"
+snclient_deb_url: "https://github.com/ConSol-Monitoring/snclient/releases/download/v{{ snclient_version }}/snclient-{{ snclient_version }}-linux-x86_64.deb"
 snclient_port: "{{ lookup('env', 'SNCLIENT_PORT') | default(0, true) | int }}"
 snclient_password: "{{ lookup('env', 'SNCLIENT_PASSWORD') | default('secret_forge_pass', true) }}"
 
+tinyproxy_version: "1.11.1"
+tinyproxy_deb_url: "http://deb.debian.org/debian/pool/main/t/tinyproxy/tinyproxy-bin_1.11.1-2.1%2bdeb12u1_amd64.deb"
 tinyproxy_port: "{{ lookup('env', 'TINYPROXY_PORT') | default(0, true) | int }}"
 tinyproxy_user: "{{ lookup('env', 'TINYPROXY_USER') | default('proxyuser', true) }}"
 tinyproxy_password: "{{ lookup('env', 'TINYPROXY_PASSWORD') | default('proxypass', true) }}"

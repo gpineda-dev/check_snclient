@@ -32,29 +32,31 @@
     remote_src: true
   when: not tinyproxy_stat.stat.exists and system_tinyproxy_stat.stat.exists
 
-- name: Download and extract tinyproxy binary if not cached
+- name: Download and install/extract tinyproxy binary if not cached
   when: not tinyproxy_stat.stat.exists and (system_tinyproxy_stat.stat is not defined or not system_tinyproxy_stat.stat.exists)
   block:
-    - name: Download tinyproxy deb package in user space
-      ansible.builtin.shell:
-        cmd: "apt-get download tinyproxy 2>/dev/null || apt-get download tinyproxy-bin"
-        chdir: "{{ tinyproxy_workdir }}"
+    - name: Download tinyproxy deb package
+      ansible.builtin.get_url:
+        url: "{{ tinyproxy_deb_url }}"
+        dest: "{{ tinyproxy_workdir }}/tinyproxy.deb"
+        mode: "0644"
+
+    - name: Install tinyproxy deb package in container image
+      when: packer_builder_type is defined
+      ansible.builtin.command:
+        cmd: "dpkg -i {{ tinyproxy_workdir }}/tinyproxy.deb"
       changed_when: true
 
-    - name: Find downloaded deb package
-      ansible.builtin.find:
-        paths: "{{ tinyproxy_workdir }}"
-        patterns: "tinyproxy*.deb"
-      register: found_deb
-
-    - name: Extract tinyproxy deb package
+    - name: Extract tinyproxy deb package in user space
+      when: packer_builder_type is not defined
       ansible.builtin.command:
-        cmd: "dpkg-deb -x {{ found_deb.files[0].path }} {{ tinyproxy_workdir }}"
+        cmd: "dpkg-deb -x {{ tinyproxy_workdir }}/tinyproxy.deb {{ tinyproxy_workdir }}/tinyproxy_extracted"
       changed_when: true
 
     - name: Copy extracted tinyproxy binary to bin_dir
+      when: packer_builder_type is not defined
       ansible.builtin.copy:
-        src: "{{ tinyproxy_workdir }}/usr/bin/tinyproxy"
+        src: "{{ tinyproxy_workdir }}/tinyproxy_extracted/usr/bin/tinyproxy"
         dest: "{{ tinyproxy_bin }}"
         mode: "0755"
         remote_src: true

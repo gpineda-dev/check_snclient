@@ -1,0 +1,30 @@
+---
+- name: Reset binary slot to default build
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Reset container symlink to nominal build
+      when: target_type == 'container'
+      block:
+        - name: Copy default binary if provided
+          when: binary_src is defined and binary_src != ""
+          ansible.builtin.copy:
+            src: "{{ binary_src }}"
+            dest: "/usr/bin/{{ component }}.orig"
+            mode: '0755'
+        - name: Reset active container symlink
+          ansible.builtin.file:
+            src: "/usr/bin/{{ component }}.orig"
+            dest: "/usr/bin/{{ component }}"
+            state: link
+            force: true
+
+    - name: Reset host symlink to nominal build
+      when: target_type == 'host'
+      block:
+        - name: Reset host symlink
+          ansible.builtin.file:
+            src: "{{ binary_src }}"
+            dest: "{{ slot_dest }}"
+            state: link
+            force: true
